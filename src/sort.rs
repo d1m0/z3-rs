@@ -3,6 +3,9 @@ use Context;
 use Symbol;
 use Sort;
 use Z3_MUTEX;
+use std::cmp::{PartialEq, Eq};
+use std::ffi::CString;
+use std::fmt::{Display, Formatter, Error};
 
 impl<'ctx> Sort<'ctx> {
 
@@ -78,4 +81,34 @@ impl<'ctx> Sort<'ctx> {
         }
     }
 
+}
+
+impl<'ctx> PartialEq<Sort<'ctx>> for Sort<'ctx> {
+    fn eq(&self, other: &Sort<'ctx>) -> bool {
+        unsafe {
+            Z3_TRUE == Z3_is_eq_sort(self.ctx.z3_ctx,
+                                    self.z3_sort,
+                                    other.z3_sort)
+        }
+    }
+}
+
+impl<'ctx> Eq for Sort<'ctx> { }
+
+
+impl<'ctx> Display for Sort<'ctx> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        let s;
+        unsafe {
+            let p = CString::from_raw(Z3_sort_to_string(self.ctx.z3_ctx, self.z3_sort) as *mut i8);
+            if p.as_ptr().is_null() {
+                return Result::Err(Error);
+            }
+            match p.into_string() {
+                Ok(parsed_s) => s = parsed_s,
+                Err(_) => return Result::Err(Error),
+            }
+        }
+        write!(f, "{}", s)
+    }
 }

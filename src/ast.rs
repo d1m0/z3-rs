@@ -7,6 +7,7 @@ use Z3_MUTEX;
 use std::hash::{Hash, Hasher};
 use std::cmp::{PartialEq, Eq};
 use std::ffi::CString;
+use std::fmt::{Display, Formatter, Error};
 
 macro_rules! unop {
     ( $f:ident, $z3fn:ident ) => {
@@ -115,6 +116,17 @@ impl<'ctx> Ast<'ctx> {
                 let sort = ctx.int_sort();
                 let guard = Z3_MUTEX.lock().unwrap();
                 Z3_mk_unsigned_int64(ctx.z3_ctx, u, sort.z3_sort)
+            })
+    }
+
+    pub fn from_bv(ctx: &'ctx Context, u: i64, bits: u32) -> Ast<'ctx> {
+            let str_u = u.to_string();
+            let ss = CString::new(str_u).unwrap();
+            let p = ss.as_ptr();
+            Ast::new(ctx, unsafe {
+                let sort = ctx.bitvector_sort(bits);
+                let guard = Z3_MUTEX.lock().unwrap();
+                Z3_mk_numeral(ctx.z3_ctx, p, sort.z3_sort)
             })
     }
 
@@ -284,3 +296,20 @@ impl<'ctx> PartialEq<Ast<'ctx>> for Ast<'ctx> {
 }
 
 impl<'ctx> Eq for Ast<'ctx> { }
+
+impl<'ctx> Display for Ast<'ctx> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        let s;
+        unsafe {
+            let p = CString::from_raw(Z3_ast_to_string(self.ctx.z3_ctx, self.z3_ast) as *mut i8);
+            if p.as_ptr().is_null() {
+                return Result::Err(Error);
+            }
+            match p.into_string() {
+                Ok(parsed_s) => s = parsed_s,
+                Err(_) => return Result::Err(Error),
+            }
+        }
+        write!(f, "{}", s)
+    }
+}
