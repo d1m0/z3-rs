@@ -6,7 +6,7 @@ use Ast;
 use Z3_MUTEX;
 use std::hash::{Hash, Hasher};
 use std::cmp::{PartialEq, Eq};
-use std::ffi::CString;
+use std::ffi::{CString, CStr};
 use std::fmt::{Display, Formatter, Error};
 
 macro_rules! unop {
@@ -252,6 +252,13 @@ impl<'ctx> Ast<'ctx> {
     binop!(bvlshr, Z3_mk_bvlshr);
     binop!(bvashr, Z3_mk_bvashr);
 
+    pub fn extract(&self, hi: u32, lo: u32) -> Ast<'ctx> {
+        Ast::new(self.ctx, unsafe {
+            let guard = Z3_MUTEX.lock().unwrap();
+            Z3_mk_extract(self.ctx.z3_ctx, hi, lo, self.z3_ast)
+        })
+    }
+
     // Array ops
     binop!(select, Z3_mk_select);
     trinop!(store, Z3_mk_store);
@@ -299,14 +306,15 @@ impl<'ctx> Eq for Ast<'ctx> { }
 
 impl<'ctx> Display for Ast<'ctx> {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
-        let s;
+        let mut s : String = String::new();
         unsafe {
-            let p = CString::from_raw(Z3_ast_to_string(self.ctx.z3_ctx, self.z3_ast) as *mut i8);
-            if p.as_ptr().is_null() {
+            let guard = Z3_MUTEX.lock().unwrap();
+            let p = Z3_ast_to_string(self.ctx.z3_ctx, self.z3_ast);
+            if p.is_null() {
                 return Result::Err(Error);
             }
-            match p.into_string() {
-                Ok(parsed_s) => s = parsed_s,
+            match CStr::from_ptr(p).to_str() {
+                Ok(valid_utf8_s) => s += valid_utf8_s,
                 Err(_) => return Result::Err(Error),
             }
         }
